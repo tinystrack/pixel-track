@@ -19,6 +19,28 @@ function makeToken(id) {
     .slice(0, 10);
 }
 
+// ── Rate limiter (in-memory) ──────────────────────────────────────────────────
+// key: `${ip}:${pixelId}` → timestamp of last recorded open
+const rateLimitCache = new Map();
+const RATE_LIMIT_MS = 60 * 1000; // 60 seconds
+
+function isRateLimited(ip, pixelId) {
+  const key = `${ip}:${pixelId}`;
+  const last = rateLimitCache.get(key);
+  const now = Date.now();
+  if (last && now - last < RATE_LIMIT_MS) return true;
+  rateLimitCache.set(key, now);
+  return false;
+}
+
+// Clean up stale entries every 5 minutes
+setInterval(() => {
+  const cutoff = Date.now() - RATE_LIMIT_MS;
+  for (const [key, ts] of rateLimitCache) {
+    if (ts < cutoff) rateLimitCache.delete(key);
+  }
+}, 5 * 60 * 1000);
+
 // ── DB init ───────────────────────────────────────────────────────────────────
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -133,26 +155,31 @@ app.get("/t/:token", (req, res) => {
     const ip =
       req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
       req.socket.remoteAddress;
-    const now = Date.now();
-    stmtInsertEvent.run(
-      pixel.id,
-      now,
-      ip,
-      req.headers["user-agent"] || null,
-      req.headers["referer"] || null
-    );
 
-    fireWebhooks({
-      event: "pixel.opened",
-      pixel_id: pixel.id,
-      token: pixel.token,
-      label: pixel.label,
-      campaign: pixel.campaign,
-      opened_at: now,
-      ip,
-      user_agent: req.headers["user-agent"] || null,
-      referer: req.headers["referer"] || null,
-    }).catch(() => {});
+    if (!isRateLimited(ip, pixel.id)) {
+      const now = Date.now();
+      stmtInsertEvent.run(
+        pixel.id,
+        now,
+        ip,
+        req.headers["user-agent"] || null,
+        req.headers["referer"] || null
+      );
+
+      fireWebhooks({
+        event: "pixel.opened",
+        pixel_id: pixel.id,
+        token: pixel.token,
+        label: pixel.label,
+        campaign: pixel.campaign,
+        opened_at: now,
+        ip,
+        user_agent: req.headers["user-agent"] || null,
+        referer: req.headers["referer"] || null,
+      }).catch(() => {});
+    } else {
+      console.log(`[rate-limit] skipped ${ip} → ${pixel.id}`);
+    }
   }
 
   res.set({
