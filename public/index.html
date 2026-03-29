@@ -855,10 +855,7 @@
   loadStats();
   loadPixels();
   loadWebhooks();
-  setInterval(() => { loadStats(); loadPixels(); loadWebhooks(); }, 15000);
-  loadStats();
-  loadPixels();
-  setInterval(() => { loadStats(); loadPixels(); }, 15000);
+  setInterval(() => { loadStats(); loadPixels(); loadWebhooks(); }, 15000);   
 // ── Webhooks ─────────────────────────────────────────────────────────────────
   async function loadWebhooks() {
     const r = await fetch("/api/webhooks");
