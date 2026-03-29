@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  pixel-track:
+    build: .
+    container_name: pixel-track
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - pixel_data:/app/data
+    environment:
+      PORT: 3000
+      DB_PATH: /app/data/pixel-track.db
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pixel_data:

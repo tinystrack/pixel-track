@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pixel-track — self-hosted email tracking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0d0e11;
+      --surface:   #13151a;
+      --surface2:  #1c1f27;
+      --border:    #252830;
+      --border2:   #2e3340;
+      --text:      #d4d8e1;
+      --muted:     #6b7280;
+      --accent:    #00e5a0;
+      --accent-dim:#00a872;
+      --red:       #ff4d6a;
+      --yellow:    #f5c542;
+      --blue:      #4d9fff;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'IBM Plex Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 14px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Top bar ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 100;
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-dot {
+      width: 7px; height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      padding: 2px 8px;
+      border-radius: 3px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .cta-header {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      text-decoration: none;
+      border: 1px solid var(--accent-dim);
+      padding: 4px 12px;
+      border-radius: 3px;
+      transition: background 0.15s, color 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .cta-header:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      padding: 20px 24px;
+    }
+
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .stat-value.green { color: var(--accent); }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Create form ── */
+    .create-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .field label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .field input {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus {
+      border-color: var(--accent-dim);
+    }
+
+    .field input::placeholder { color: var(--muted); }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      padding: 9px 20px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 600;
+    }
+
+    .btn-primary:hover { background: #00ffb3; }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--red);
+      border: 1px solid #ff4d6a44;
+      font-size: 11px;
+      padding: 5px 10px;
+    }
+
+    .btn-danger:hover { background: #ff4d6a18; }
+
+    /* ── Pixel table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-align: left;
+      padding: 10px 16px;
+      background: var(--surface2);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td { background: #ffffff04; }
+
+    .pixel-id {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .pixel-id:hover { color: var(--accent); }
+
+    .label-text {
+      font-weight: 500;
+    }
+
+    .campaign-badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      padding: 2px 8px;
+      border-radius: 3px;
+      color: var(--muted);
+    }
+
+    .open-count {
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .open-count.zero { color: var(--muted); }
+
+    .time-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: none;
+      margin-bottom: 32px;
+    }
+
+    .detail-panel.open { display: block; }
+
+    .detail-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .detail-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .pixel-url-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      padding: 10px 16px;
+      margin: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .pixel-url-box code {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    .btn-copy {
+      font-family: var(--mono);
+      font-size: 10px;
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-copy.copied { border-color: var(--accent); color: var(--accent); }
+
+    .embed-box {
+      margin: 0 20px 16px;
+    }
+
+    .embed-box label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .embed-box textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 10px 12px;
+      border-radius: 4px;
+      resize: vertical;
+      min-height: 56px;
+      outline: none;
+    }
+
+    .events-list {
+      margin: 0 20px 20px;
+    }
+
+    .event-row {
+      display: flex;
+      gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      align-items: center;
+    }
+
+    .event-row:last-child { border-bottom: none; }
+
+    .event-time { color: var(--text); white-space: nowrap; }
+    .event-ip   { color: var(--blue); }
+    .event-ua   { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── MailTrace CTA banner ── */
+    .cta-banner {
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 24px 28px;
+      background: linear-gradient(135deg, #13151a 0%, #1a1d24 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .cta-left {}
+    .cta-eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-dim);
+      margin-bottom: 6px;
+    }
+
+    .cta-headline {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .cta-sub {
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 480px;
+    }
+
+    .cta-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .pill {
+      font-family: var(--mono);
+      font-size: 10px;
+      border: 1px solid var(--border2);
+      padding: 3px 10px;
+      border-radius: 20px;
+      color: var(--muted);
+    }
+
+    .cta-right {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .btn-cta-main {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 11px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-cta-main:hover { background: #00ffb3; }
+
+    .cta-note {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      padding: 10px 18px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .stats-row { grid-template-columns: 1fr; }
+      .create-form { flex-direction: column; }
+      .cta-banner { flex-direction: column; }
+      .cta-right { align-items: flex-start; }
+      .cta-note { text-align: left; }
+      th:nth-child(3), td:nth-child(3),
+      th:nth-child(5), td:nth-child(5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-dot"></span>
+    pixel-track
+  </div>
+  <div class="header-right">
+    <span class="badge">SELF-HOSTED</span>
+    <a class="cta-header" href="https://mailtrace.io?ref=pixel-track" target="_blank">MailTrace ↗</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- Stats -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Pixels</div>
+      <div class="stat-value" id="stat-pixels">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Opens</div>
+      <div class="stat-value green" id="stat-opens">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Pixels With Opens</div>
+      <div class="stat-value" id="stat-active">—</div>
+    </div>
+  </div>
+
+  <!-- Create -->
+  <div class="section-header">
+    <span class="section-title">// create new pixel</span>
+  </div>
+  <div class="create-form">
+    <div class="field">
+      <label>Label</label>
+      <input type="text" id="input-label" placeholder="e.g. April Newsletter" />
+    </div>
+    <div class="field">
+      <label>Campaign</label>
+      <input type="text" id="input-campaign" placeholder="e.g. onboarding-v2" />
+    </div>
+    <button class="btn btn-primary" onclick="createPixel()">+ Generate Pixel</button>
+  </div>
+
+  <!-- Detail panel -->
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <span class="detail-title" id="detail-title">—</span>
+      <button class="btn btn-danger" onclick="closeDetail()">close</button>
+    </div>
+    <div class="pixel-url-box">
+      <code id="detail-url">—</code>
+      <button class="btn-copy" id="btn-copy-url" onclick="copyUrl()">copy</button>
+    </div>
+    <div class="embed-box">
+      <label>HTML embed (paste into email)</label>
+      <textarea id="detail-embed" readonly></textarea>
+    </div>
+    <div class="embed-box">
+      <label>Recent opens</label>
+      <div class="events-list" id="detail-events">
+        <div class="empty-state">No opens yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pixel list -->
+  <div class="section-header">
+    <span class="section-title">// tracked pixels</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Campaign</th>
+          <th>Pixel ID</th>
+          <th>Opens</th>
+          <th>Last Open</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="pixel-tbody">
+        <tr><td colspan="6" class="empty-state">No pixels yet. Create your first one above.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- MailTrace CTA -->
+  <div class="cta-banner">
+    <div class="cta-left">
+      <div class="cta-eyebrow">Want more power?</div>
+      <div class="cta-headline">Meet MailTrace — tracking built for senders.</div>
+      <div class="cta-sub">pixel-track is great for self-hosting, but MailTrace adds team dashboards, link tracking, open-rate analytics, deliverability insights, and integrations — no infra to manage.</div>
+      <div class="cta-pills">
+        <span class="pill">Link tracking</span>
+        <span class="pill">Team dashboards</span>
+        <span class="pill">Deliverability insights</span>
+        <span class="pill">ESP integrations</span>
+        <span class="pill">Open-rate trends</span>
+      </div>
+    </div>
+    <div class="cta-right">
+      <a class="btn-cta-main" href="https://mailtrace.io?ref=pixel-track" target="_blank">Try MailTrace free →</a>
+      <span class="cta-note">14-day free trial · no credit card</span>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+  const BASE = window.location.origin;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2200);
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+  }
+
+  function fmtId(id) {
+    return id.slice(0, 8) + "…";
+  }
+
+  // ── Stats ────────────────────────────────────────────────────────────────────
+  async function loadStats() {
+    const r = await fetch("/api/stats");
+    const s = await r.json();
+    document.getElementById("stat-pixels").textContent = s.total_pixels;
+    document.getElementById("stat-opens").textContent  = s.total_opens;
+    document.getElementById("stat-active").textContent = s.pixels_with_opens;
+  }
+
+  // ── Pixels ───────────────────────────────────────────────────────────────────
+  async function loadPixels() {
+    const r = await fetch("/api/pixels");
+    const pixels = await r.json();
+    const tbody = document.getElementById("pixel-tbody");
+
+    if (!pixels.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No pixels yet. Create your first one above.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = pixels.map(p => `
+      <tr>
+        <td><span class="label-text">${esc(p.label || "Untitled")}</span></td>
+        <td>${p.campaign ? `<span class="campaign-badge">${esc(p.campaign)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td><span class="pixel-id" onclick="openDetail('${p.id}')" title="Click to view details">${fmtId(p.id)}</span></td>
+        <td><span class="open-count ${p.open_count === 0 ? 'zero' : ''}">${p.open_count}</span></td>
+        <td><span class="time-text">${fmtTime(p.last_opened_at)}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-danger" onclick="deletePixel('${p.id}', event)">delete</button>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  function esc(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ── Create ───────────────────────────────────────────────────────────────────
+  async function createPixel() {
+    const label    = document.getElementById("input-label").value.trim();
+    const campaign = document.getElementById("input-campaign").value.trim();
+
+    const r = await fetch("/api/pixels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label, campaign })
+    });
+
+    const p = await r.json();
+    document.getElementById("input-label").value    = "";
+    document.getElementById("input-campaign").value = "";
+
+    await Promise.all([loadPixels(), loadStats()]);
+    openDetail(p.id);
+    toast("Pixel created");
+  }
+
+  // ── Delete ───────────────────────────────────────────────────────────────────
+  async function deletePixel(id, e) {
+    e.stopPropagation();
+    if (!confirm("Delete this pixel and all its event data?")) return;
+    await fetch(`/api/pixels/${id}`, { method: "DELETE" });
+    if (document.getElementById("detail-panel").dataset.id === id) closeDetail();
+    await Promise.all([loadPixels(), loadStats()]);
+    toast("Pixel deleted");
+  }
+
+  // ── Detail ───────────────────────────────────────────────────────────────────
+  async function openDetail(id) {
+    const r = await fetch(`/api/pixels/${id}`);
+    const p = await r.json();
+
+    const panel = document.getElementById("detail-panel");
+    panel.dataset.id = id;
+
+    const url = `${BASE}/t/${id}`;
+    document.getElementById("detail-title").textContent = p.label || "Untitled";
+    document.getElementById("detail-url").textContent   = url;
+    document.getElementById("detail-embed").value       =
+      `<img src="${url}" width="1" height="1" alt="" style="display:none" />`;
+
+    const evEl = document.getElementById("detail-events");
+    if (!p.events.length) {
+      evEl.innerHTML = `<div class="empty-state">No opens yet.</div>`;
+    } else {
+      evEl.innerHTML = p.events.map(ev => `
+        <div class="event-row">
+          <span class="event-time">${fmtTime(ev.opened_at)}</span>
+          <span class="event-ip">${esc(ev.ip || "—")}</span>
+          <span class="event-ua">${esc(ev.user_agent || "—")}</span>
+        </div>
+      `).join("");
+    }
+
+    panel.classList.add("open");
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    // reset copy btn
+    const btn = document.getElementById("btn-copy-url");
+    btn.textContent = "copy";
+    btn.classList.remove("copied");
+  }
+
+  function closeDetail() {
+    document.getElementById("detail-panel").classList.remove("open");
+  }
+
+  function copyUrl() {
+    const url = document.getElementById("detail-url").textContent;
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById("btn-copy-url");
+      btn.textContent = "copied!";
+      btn.classList.add("copied");
+      toast("URL copied to clipboard");
+    });
+  }
+
+  // ── Enter key ────────────────────────────────────────────────────────────────
+  ["input-label","input-campaign"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => {
+      if (e.key === "Enter") createPixel();
+    });
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  loadStats();
+  loadPixels();
+  setInterval(() => { loadStats(); loadPixels(); }, 15000);
+</script>
+</body>
+</html>
