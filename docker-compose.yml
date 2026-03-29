@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   pixel-track:
     build: .
@@ -12,11 +11,11 @@ services:
     environment:
       PORT: 3000
       DB_PATH: /app/data/pixel-track.db
+      TOKEN_SECRET: "00197b78eac59e1500aad1f354c6a52c4ed4d0e8a5426bc2b107e4f220d138c6"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
       interval: 30s
       timeout: 5s
       retries: 3
-
 volumes:
   pixel_data:

@@ -1,12 +1,23 @@
 const express = require("express");
 const Database = require("better-sqlite3");
 const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || "./data/pixel-track.db";
+const TOKEN_SECRET = process.env.TOKEN_SECRET || "pixel-track-secret-change-me";
+
+// ── Token generator ───────────────────────────────────────────────────────────
+function makeToken(id) {
+  return crypto
+    .createHmac("sha256", TOKEN_SECRET)
+    .update(id)
+    .digest("base64url")
+    .slice(0, 10);
+}
 
 // ── DB init ───────────────────────────────────────────────────────────────────
 const dataDir = path.dirname(DB_PATH);
@@ -17,6 +28,7 @@ const db = new Database(DB_PATH);
 db.exec(`
   CREATE TABLE IF NOT EXISTS pixels (
     id          TEXT PRIMARY KEY,
+    token       TEXT NOT NULL UNIQUE,
     label       TEXT NOT NULL DEFAULT '',
     campaign    TEXT NOT NULL DEFAULT '',
     created_at  INTEGER NOT NULL
@@ -43,16 +55,18 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_events_pixel_id ON events(pixel_id);
   CREATE INDEX IF NOT EXISTS idx_events_opened_at ON events(opened_at);
+  CREATE INDEX IF NOT EXISTS idx_pixels_token ON pixels(token);
 `);
 
 // ── Prepared statements ───────────────────────────────────────────────────────
 const stmtInsertPixel = db.prepare(
-  "INSERT INTO pixels (id, label, campaign, created_at) VALUES (?, ?, ?, ?)"
+  "INSERT INTO pixels (id, token, label, campaign, created_at) VALUES (?, ?, ?, ?, ?)"
 );
 const stmtInsertEvent = db.prepare(
   "INSERT INTO events (pixel_id, opened_at, ip, user_agent, referer) VALUES (?, ?, ?, ?, ?)"
 );
-const stmtGetPixel = db.prepare("SELECT * FROM pixels WHERE id = ?");
+const stmtGetPixelById = db.prepare("SELECT * FROM pixels WHERE id = ?");
+const stmtGetPixelByToken = db.prepare("SELECT * FROM pixels WHERE token = ?");
 const stmtListPixels = db.prepare(`
   SELECT p.*,
     COUNT(e.id) AS open_count,
@@ -112,9 +126,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ── Tracking endpoint ─────────────────────────────────────────────────────────
-app.get("/t/:pixelId", (req, res) => {
-  const { pixelId } = req.params;
-  const pixel = stmtGetPixel.get(pixelId);
+app.get("/t/:token", (req, res) => {
+  const pixel = stmtGetPixelByToken.get(req.params.token);
 
   if (pixel) {
     const ip =
@@ -122,17 +135,17 @@ app.get("/t/:pixelId", (req, res) => {
       req.socket.remoteAddress;
     const now = Date.now();
     stmtInsertEvent.run(
-      pixelId,
+      pixel.id,
       now,
       ip,
       req.headers["user-agent"] || null,
       req.headers["referer"] || null
     );
 
-    // 异步触发 webhook，不阻塞响应
     fireWebhooks({
       event: "pixel.opened",
-      pixel_id: pixelId,
+      pixel_id: pixel.id,
+      token: pixel.token,
       label: pixel.label,
       campaign: pixel.campaign,
       opened_at: now,
@@ -157,8 +170,9 @@ app.get("/t/:pixelId", (req, res) => {
 app.post("/api/pixels", (req, res) => {
   const { label = "", campaign = "" } = req.body || {};
   const id = uuidv4();
-  stmtInsertPixel.run(id, label, campaign, Date.now());
-  res.status(201).json({ id, label, campaign });
+  const token = makeToken(id);
+  stmtInsertPixel.run(id, token, label, campaign, Date.now());
+  res.status(201).json({ id, token, label, campaign });
 });
 
 // GET /api/pixels
@@ -168,7 +182,7 @@ app.get("/api/pixels", (_req, res) => {
 
 // GET /api/pixels/:id
 app.get("/api/pixels/:id", (req, res) => {
-  const pixel = stmtGetPixel.get(req.params.id);
+  const pixel = stmtGetPixelById.get(req.params.id);
   if (!pixel) return res.status(404).json({ error: "Pixel not found" });
   const events = stmtGetEvents.all(req.params.id);
   res.json({ ...pixel, events });
@@ -176,7 +190,7 @@ app.get("/api/pixels/:id", (req, res) => {
 
 // DELETE /api/pixels/:id
 app.delete("/api/pixels/:id", (req, res) => {
-  const pixel = stmtGetPixel.get(req.params.id);
+  const pixel = stmtGetPixelById.get(req.params.id);
   if (!pixel) return res.status(404).json({ error: "Pixel not found" });
   db.prepare("DELETE FROM events WHERE pixel_id = ?").run(req.params.id);
   db.prepare("DELETE FROM pixels WHERE id = ?").run(req.params.id);
