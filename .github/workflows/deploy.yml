@@ -18,12 +18,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p 19785 172.98.22.157 >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy
         run: |
           ssh -i ~/.ssh/deploy_key \
-              -p 19785 \
+              -p ${{ secrets.SSH_PORT }} \
               -o StrictHostKeyChecking=no \
-              root@172.98.22.157 \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               "cd /root/pixel-track && git pull origin main && docker compose down && docker compose up -d --build"
