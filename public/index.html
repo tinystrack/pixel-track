@@ -647,6 +647,38 @@
     </table>
   </div>
 
+  <!-- Webhooks -->
+  <div class="section-header">
+    <span class="section-title">// webhooks</span>
+  </div>
+  <div class="create-form" style="margin-bottom:12px">
+    <div class="field">
+      <label>Webhook URL</label>
+      <input type="text" id="input-wh-url" placeholder="https://your-service.com/hook" />
+    </div>
+    <div class="field" style="max-width:200px">
+      <label>Label</label>
+      <input type="text" id="input-wh-label" placeholder="e.g. MailTrace" />
+    </div>
+    <button class="btn btn-primary" onclick="createWebhook()">+ Add Webhook</button>
+  </div>
+  <div class="table-wrap" style="margin-bottom:32px">
+    <table>
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>URL</th>
+          <th>Fired</th>
+          <th>Last Fire</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="webhook-tbody">
+        <tr><td colspan="5" class="empty-state">No webhooks yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- MailTrace CTA -->
   <div class="cta-banner">
     <div class="cta-left">
@@ -822,7 +854,55 @@
   // ── Init ──────────────────────────────────────────────────────────────────────
   loadStats();
   loadPixels();
+  loadWebhooks();
+  setInterval(() => { loadStats(); loadPixels(); loadWebhooks(); }, 15000);
+  loadStats();
+  loadPixels();
   setInterval(() => { loadStats(); loadPixels(); }, 15000);
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+  async function loadWebhooks() {
+    const r = await fetch("/api/webhooks");
+    const hooks = await r.json();
+    const tbody = document.getElementById("webhook-tbody");
+    if (!hooks.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No webhooks yet.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = hooks.map(h => `
+      <tr>
+        <td><span class="label-text">${esc(h.label || "—")}</span></td>
+        <td><span class="pixel-id" title="${esc(h.url)}">${esc(h.url.length > 48 ? h.url.slice(0,48)+"…" : h.url)}</span></td>
+        <td><span class="open-count ${h.fire_count === 0 ? 'zero' : ''}">${h.fire_count}</span></td>
+        <td><span class="time-text">${fmtTime(h.last_fired_at)}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-danger" onclick="deleteWebhook('${h.id}')">delete</button>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  async function createWebhook() {
+    const url   = document.getElementById("input-wh-url").value.trim();
+    const label = document.getElementById("input-wh-label").value.trim();
+    if (!url) return toast("URL required");
+    const r = await fetch("/api/webhooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, label })
+    });
+    if (!r.ok) { const e = await r.json(); return toast(e.error || "Error"); }
+    document.getElementById("input-wh-url").value   = "";
+    document.getElementById("input-wh-label").value = "";
+    await loadWebhooks();
+    toast("Webhook added");
+  }
+
+  async function deleteWebhook(id) {
+    if (!confirm("Delete this webhook?")) return;
+    await fetch(`/api/webhooks/${id}`, { method: "DELETE" });
+    await loadWebhooks();
+    toast("Webhook deleted");
+  }
 </script>
 </body>
 </html>
