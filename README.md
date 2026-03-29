@@ -96,7 +96,7 @@ Register a webhook URL in the dashboard and pixel-track will POST to it on every
 | `PORT` | `3000` | HTTP port |
 | `DB_PATH` | `./data/pixel-track.db` | SQLite path |
 | `TOKEN_SECRET` | *(change this)* | HMAC secret for pixel token generation |
-
+| `RATE_LIMIT_MS` | `60000` | Minimum ms between opens from same IP per pixel |
 **Important:** set `TOKEN_SECRET` to a random string in production:
 ```bash
 openssl rand -hex 32
